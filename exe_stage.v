@@ -9,6 +9,9 @@ module exe_stage(
     //from ds
     input                          ds_to_es_valid,
     input  [`DS_TO_ES_BUS_WD -1:0] ds_to_es_bus  ,
+    // to ds
+    output [4                  :0] es_to_ds_dest ,
+    output                         es_to_ds_load_op,
     //to ms
     output                         es_to_ms_valid,
     output [`ES_TO_MS_BUS_WD -1:0] es_to_ms_bus  ,
@@ -29,9 +32,7 @@ wire [11:0] alu_op      ;
 wire        es_load_op;
 wire        src1_is_pc;
 wire        src2_is_imm;
-wire        src2_is_4;
 wire        res_from_mem;
-wire        dst_is_r1;
 wire        gr_we;
 wire        es_mem_we;
 wire [4: 0] dest;
@@ -45,7 +46,6 @@ assign {alu_op,
         es_load_op,
         src1_is_pc,
         src2_is_imm,
-        src2_is_4,
         gr_we,
         es_mem_we,
         dest,
@@ -62,10 +62,7 @@ wire [31:0] alu_result ;
 
 
 // did't use in lab7
-wire        es_res_from_mem;
-assign es_res_from_mem = es_load_op;
-
-
+assign es_to_ds_load_op = es_load_op;
 
 assign es_to_ms_bus = {res_from_mem,  //70:70 1
                        gr_we       ,  //69:69 1
@@ -77,6 +74,7 @@ assign es_to_ms_bus = {res_from_mem,  //70:70 1
 assign es_ready_go    = 1'b1;
 assign es_allowin     = !es_valid || es_ready_go && ms_allowin;
 assign es_to_ms_valid =  es_valid && es_ready_go;
+assign es_to_ds_dest  =  dest & {5{es_valid}};
 always @(posedge clk) begin
     if (reset) begin
         es_valid <= 1'b0;

@@ -1,20 +1,22 @@
 `include "mycpu_head.v"
 
 module wb_stage(
-    input                           clk           ,
-    input                           reset         ,
+    input wire                          clk           ,
+    input wire                          reset         ,
     //allowin
-    output                          ws_allowin    ,
+    output wire                         ws_allowin    ,
     //from ms
-    input                           ms_to_ws_valid,
-    input  [`MS_TO_WS_BUS_WD -1:0]  ms_to_ws_bus  ,
+    input wire                          ms_to_ws_valid,
+    input wire [`MS_TO_WS_BUS_WD -1:0]  ms_to_ws_bus  ,
+    //to ds
+    output wire [4                  :0]  ws_to_ds_dest ,
     //to rf: for write back
-    output [`WS_TO_RF_BUS_WD -1:0]  ws_to_rf_bus  ,
+    output wire [`WS_TO_RF_BUS_WD -1:0]  ws_to_rf_bus  ,
     //trace debug interface
-    output [31:0] debug_wb_pc     ,
-    output [ 3:0] debug_wb_rf_we  ,
-    output [ 4:0] debug_wb_rf_wnum,
-    output [31:0] debug_wb_rf_wdata
+    output wire [31:0] debug_wb_pc     ,
+    output wire [ 3:0] debug_wb_rf_we  ,
+    output wire [ 4:0] debug_wb_rf_wnum,
+    output wire [31:0] debug_wb_rf_wdata
 );
 
 reg         ws_valid;
@@ -41,6 +43,7 @@ assign ws_to_rf_bus = {rf_we   ,  //37:37
 
 assign ws_ready_go = 1'b1;
 assign ws_allowin  = !ws_valid || ws_ready_go;
+assign ws_to_ds_dest = ws_dest & {5{ws_valid}};
 always @(posedge clk) begin
     if (reset) begin
         ws_valid <= 1'b0;

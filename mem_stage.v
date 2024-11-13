@@ -12,6 +12,8 @@ module mem_stage(
     //to ws
     output                         ms_to_ws_valid,
     output [`MS_TO_WS_BUS_WD -1:0] ms_to_ws_bus  ,
+    //to ds
+    output [4                  :0] ms_to_ds_dest ,
     
     //from data-sram
     input  [31                 :0] data_sram_rdata
@@ -47,6 +49,7 @@ assign ms_to_ws_bus = {ms_gr_we       ,  //69:69
 assign ms_ready_go    = 1'b1;
 assign ms_allowin     = !ms_valid || ms_ready_go && ws_allowin;
 assign ms_to_ws_valid = ms_valid && ms_ready_go;
+assign ms_to_ds_dest  = ms_dest & {5{ms_valid}};
 always @(posedge clk) begin
     if (reset) begin
         ms_valid <= 1'b0;
