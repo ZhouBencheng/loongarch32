@@ -30,7 +30,7 @@ assign op_xor   = alu_op[ 7];
 assign op_sll   = alu_op[ 8];
 assign op_srl   = alu_op[ 9];
 assign op_sra   = alu_op[10];
-assign op_lui = alu_op[11]; // mod
+assign op_lui   = alu_op[11]; // mod
 
 wire [31:0] add_sub_result;
 wire [31:0] slt_result;
@@ -43,8 +43,6 @@ wire [31:0] xor_result;
 wire [31:0] lui_result;
 wire [31:0] sll_result;
 wire [64:0] sr64_result;
-wire [31:0] srl_result; 
-wire [31:0] sra_result; 
 
 // 32-bit adder
 wire [31:0] adder_a;
@@ -83,8 +81,7 @@ assign sll_result = alu_src1 << alu_src2;   //mod //rj << i5
 // SRL, SRA result
 assign sr64_result = {{32{op_sra & alu_src1[31]}}, alu_src1[31:0]} >> alu_src2; //rj >> i5 
 
-assign srl_result   = sr64_result[31:0]; 
-assign sra_result   = sr64_result[31:0]; //add
+assign sr_result = sr64_result[31:0];
 
 // final result mux
 assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
@@ -96,7 +93,6 @@ assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
                 | ({32{op_xor       }} & xor_result)
                 | ({32{op_lui       }} & lui_result)
                 | ({32{op_sll       }} & sll_result)
-                | ({32{op_srl       }} & srl_result)
-                | ({32{op_sra       }} & sra_result);
+                | ({32{op_srl | op_sra}} & sr_result);
 
 endmodule
