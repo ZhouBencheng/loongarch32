@@ -19,7 +19,15 @@ module mycpu_top(
     output [31:0] debug_wb_pc,
     output [ 3:0] debug_wb_rf_we,
     output [ 4:0] debug_wb_rf_wnum,
-    output [31:0] debug_wb_rf_wdata
+    output [31:0] debug_wb_rf_wdata,
+    output [31:0] debug_if_pc,
+    output [31:0] debug_id_pc,
+    output [31:0] debug_es_pc,
+    output [31:0] debug_ms_pc,
+    output [31:0] debug_es_alu_result,
+    output [31:0] debug_mem_result,
+    output [31:0] debug_es_alu_src1,
+    output [31:0] debug_es_alu_src2
 );
 reg         reset;
 always @(posedge clk) reset <= ~resetn;
@@ -61,7 +69,9 @@ if_stage if_stage(
     .inst_sram_we   (inst_sram_we  ),
     .inst_sram_addr (inst_sram_addr ),
     .inst_sram_wdata(inst_sram_wdata),
-    .inst_sram_rdata(inst_sram_rdata)
+    .inst_sram_rdata(inst_sram_rdata),
+    //debug
+    .debug_if_pc    (debug_if_pc     )
 );
 // ID stage
 id_stage id_stage(
@@ -87,7 +97,9 @@ id_stage id_stage(
     .es_to_ds_load_op(es_to_ds_load_op),
     .es_to_ds_result(es_to_ds_result),
     .ms_to_ds_result(ms_to_ds_result),
-    .ws_to_ds_result(ws_to_ds_result)
+    .ws_to_ds_result(ws_to_ds_result),
+    //debug
+    .debug_id_pc    (debug_id_pc     )
 );
 // EXE stage
 exe_stage exe_stage(
@@ -110,7 +122,12 @@ exe_stage exe_stage(
     .data_sram_en   (data_sram_en   ),
     .data_sram_we   (data_sram_we  ),
     .data_sram_addr (data_sram_addr ),
-    .data_sram_wdata(data_sram_wdata)
+    .data_sram_wdata(data_sram_wdata),
+    //debug
+    .debug_es_pc    (debug_es_pc     ),
+    .debug_es_alu_result(debug_es_alu_result),
+    .debug_es_alu_src1  (debug_es_alu_src1  ),
+    .debug_es_alu_src2  (debug_es_alu_src2  )
 );
 // MEM stage
 mem_stage mem_stage(
@@ -129,7 +146,10 @@ mem_stage mem_stage(
     .ms_to_ds_dest  (ms_to_ds_dest  ),
     .ms_to_ds_result(ms_to_ds_result),
     //from data-sram
-    .data_sram_rdata(data_sram_rdata)
+    .data_sram_rdata(data_sram_rdata),
+    //debug
+    .debug_ms_pc    (debug_ms_pc     ),
+    .debug_mem_result(debug_mem_result)
 );
 // WB stage
 wb_stage wb_stage(

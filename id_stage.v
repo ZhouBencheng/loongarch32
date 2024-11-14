@@ -25,7 +25,9 @@ module id_stage(
     // 处理exe ms ws前递结果
     input  [31                 :0] es_to_ds_result ,
     input  [31                 :0] ms_to_ds_result ,
-    input  [31                 :0] ws_to_ds_result
+    input  [31                 :0] ws_to_ds_result,
+
+    output [31                 :0] debug_id_pc
 );
 
 wire        br_taken;
@@ -125,7 +127,6 @@ wire src_no_rd;
 wire no_wait;
 
 wire load_stall;
-wire br_stall;
 
 assign op_31_26  = ds_inst[31:26];
 assign op_25_22  = ds_inst[25:22];
@@ -238,7 +239,6 @@ assign no_wait = ~rj_wait & ~rk_wait & ~rd_wait;
 assign load_stall = (es_to_ds_load_op) && ((rj == es_to_ds_dest && rj_wait) 
                                       || (rk == es_to_ds_dest && rk_wait) 
                                       || (rd == es_to_ds_dest && rd_wait));
-assign br_stall = load_stall & br_taken & ds_valid;
 
 regfile u_regfile(
     .clk    (clk      ),
@@ -274,12 +274,14 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
 assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (ds_pc + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
-assign br_bus = {br_stall, br_taken, br_target};
+assign br_bus = {br_taken, br_target};
 
 reg  [`FS_TO_DS_BUS_WD -1:0] fs_to_ds_bus_r;
 
 assign {ds_inst,
         ds_pc  } = fs_to_ds_bus_r;
+
+assign debug_id_pc = ds_pc;
 
 assign {rf_we   ,  //37:37
         rf_waddr,  //36:32
@@ -299,7 +301,8 @@ assign ds_to_es_bus = {alu_op       ,   // 12
                        rj_value     ,   // 32
                        rkd_value    ,   // 32
                        ds_pc        ,    // 32
-                       res_from_mem
+                       res_from_mem ,
+                       inst_no_dest
                     };
 
 assign ds_ready_go    = ds_valid && ~load_stall;

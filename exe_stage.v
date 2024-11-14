@@ -21,7 +21,12 @@ module exe_stage(
     output        data_sram_en   ,
     output [ 3:0] data_sram_we   ,
     output [31:0] data_sram_addr ,
-    output [31:0] data_sram_wdata
+    output [31:0] data_sram_wdata,
+    //debug
+    output [31:0] debug_es_pc,
+    output [31:0] debug_es_alu_result,
+    output [31:0] debug_es_alu_src1,
+    output [31:0] debug_es_alu_src2
 );
 
 reg         es_valid      ;
@@ -41,6 +46,7 @@ wire [31:0] rj_value;
 wire [31:0] rkd_value;
 wire [31:0] imm;
 wire [31:0] es_pc;
+wire        es_inst_no_dest;
 
 
 assign {alu_op,
@@ -54,7 +60,8 @@ assign {alu_op,
         rj_value,
         rkd_value,
         es_pc,
-        res_from_mem
+        res_from_mem,
+        es_inst_no_dest
        } = ds_to_es_bus_r;
 
 wire [31:0] alu_src1   ;
@@ -65,17 +72,20 @@ wire [31:0] alu_result ;
 // did't use in lab7
 assign es_to_ds_load_op = es_load_op;
 
+assign debug_es_pc = es_pc;
+
 assign es_to_ms_bus = {res_from_mem,  //70:70 1
                        gr_we       ,  //69:69 1
                        dest        ,  //68:64 5
                        alu_result  ,  //63:32 32
-                       es_pc          //31:0  32
+                       es_pc       ,  //31:0  32
+                       es_inst_no_dest //1
                       };
 
 assign es_ready_go    = 1'b1;
 assign es_allowin     = !es_valid || es_ready_go && ms_allowin;
 assign es_to_ms_valid =  es_valid && es_ready_go;
-assign es_to_ds_dest  =  dest & {5{es_valid}};
+assign es_to_ds_dest  =  dest & {5{es_valid & ~es_inst_no_dest}};
 always @(posedge clk) begin
     if (reset) begin
         es_valid <= 1'b0;
@@ -106,5 +116,8 @@ assign data_sram_we    = es_mem_we && es_valid ? 4'hf : 4'h0;
 assign data_sram_addr  = alu_result;
 assign data_sram_wdata = rkd_value;
 
+assign debug_es_alu_result = alu_result;
+assign debug_es_alu_src1   = alu_src1;
+assign debug_es_alu_src2   = alu_src2;
 
 endmodule

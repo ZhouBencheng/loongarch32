@@ -22,6 +22,7 @@ module wb_stage(
 
 reg         ws_valid;
 wire        ws_ready_go;
+wire        ws_inst_no_dest;
 
 reg [`MS_TO_WS_BUS_WD -1:0] ms_to_ws_bus_r;
 wire        ws_gr_we;
@@ -31,7 +32,8 @@ wire [31:0] ws_pc;
 assign {ws_gr_we       ,  //69:69
         ws_dest        ,  //68:64
         ws_final_result,  //63:32
-        ws_pc             //31:0
+        ws_pc            ,  //31:0
+        ws_inst_no_dest  //1
        } = ms_to_ws_bus_r;
 
 wire        rf_we;
@@ -44,7 +46,7 @@ assign ws_to_rf_bus = {rf_we   ,  //37:37
 
 assign ws_ready_go = 1'b1;
 assign ws_allowin  = !ws_valid || ws_ready_go;
-assign ws_to_ds_dest = ws_dest & {5{ws_valid}};
+assign ws_to_ds_dest = ws_dest & {5{ws_valid & ~ws_inst_no_dest}};
 always @(posedge clk) begin
     if (reset) begin
         ws_valid <= 1'b0;

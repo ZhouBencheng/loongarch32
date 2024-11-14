@@ -15,30 +15,29 @@ module if_stage(
     output [ 3:0]                  inst_sram_we   ,
     output [31:0]                  inst_sram_addr ,
     output [31:0]                  inst_sram_wdata,
-    input  [31:0]                  inst_sram_rdata
+    input  [31:0]                  inst_sram_rdata,
+
+    output [31:0]                  debug_if_pc
 );
 
 reg         fs_valid;
 wire        fs_ready_go;
 wire        fs_allowin;
 wire        to_fs_valid;
-wire        br_stall;
-wire        pre_if_ready_go;
 
 wire [31:0] seq_pc;
 wire [31:0] nextpc;
 
 wire         br_taken;
 wire [ 31:0] br_target;
-assign {br_stall, br_taken, br_target} = br_bus;
+assign {br_taken, br_target} = br_bus;
 
 wire [31:0] fs_inst;
 reg  [31:0] fs_pc;
 assign fs_to_ds_bus = {fs_inst, fs_pc};
 
 // pre-IF stage
-assign pre_if_ready_go = ~br_stall;
-assign to_fs_valid  = ~reset && pre_if_ready_go;
+assign to_fs_valid  = ~reset;
 // because after sending fs_pc to ds, the seq_pc = fs_pc + 4 immediately
 // Actually, the seq_pc is just a delay slot instruction
 // if we use inst pc, here need to -4, it's more troublesome
@@ -68,11 +67,13 @@ always @(posedge clk) begin
 end
 
 // IF模块的4个输出
-assign inst_sram_en    = to_fs_valid && (fs_allowin || br_taken) && pre_if_ready_go;
+assign inst_sram_en    = to_fs_valid && (fs_allowin || br_taken);
 assign inst_sram_we    = 4'h0;
 assign inst_sram_addr  = nextpc;
 assign inst_sram_wdata = 32'b0;
 
 assign fs_inst         = inst_sram_rdata;
+
+assign debug_if_pc     = fs_pc;
 
 endmodule
