@@ -10,6 +10,7 @@ module wb_stage(
     input wire [`MS_TO_WS_BUS_WD -1:0]  ms_to_ws_bus  ,
     //to ds
     output wire [4                  :0]  ws_to_ds_dest ,
+    output wire [31                 :0]  ws_to_ds_result,
     //to rf: for write back
     output wire [`WS_TO_RF_BUS_WD -1:0]  ws_to_rf_bus  ,
     //trace debug interface
@@ -60,6 +61,7 @@ end
 assign rf_we    = ws_gr_we && ws_valid;
 assign rf_waddr = ws_dest;
 assign rf_wdata = ws_final_result;
+assign ws_to_ds_result = ws_final_result;
 
 // debug info generate
 assign debug_wb_pc       = ws_pc;

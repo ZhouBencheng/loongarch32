@@ -12,6 +12,7 @@ module exe_stage(
     // to ds
     output [4                  :0] es_to_ds_dest ,
     output                         es_to_ds_load_op,
+    output [31                 :0] es_to_ds_result,
     //to ms
     output                         es_to_ms_valid,
     output [`ES_TO_MS_BUS_WD -1:0] es_to_ms_bus  ,
@@ -97,6 +98,8 @@ alu u_alu(
     .alu_src2   (alu_src2  ),
     .alu_result (alu_result)
     );
+    
+assign es_to_ds_result = alu_result;
 
 assign data_sram_en    = 1'b1;
 assign data_sram_we    = es_mem_we && es_valid ? 4'hf : 4'h0;

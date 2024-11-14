@@ -42,6 +42,9 @@ wire [4                  :0] es_to_ds_dest;
 wire [4                  :0] ms_to_ds_dest;
 wire [4                  :0] ws_to_ds_dest;
 wire                         es_to_ds_load_op;
+wire [31                 :0] es_to_ds_result;
+wire [31                 :0] ms_to_ds_result;
+wire [31                 :0] ws_to_ds_result;
 // IF stage
 if_stage if_stage(
     .clk            (clk            ),
@@ -81,7 +84,10 @@ id_stage id_stage(
     .es_to_ds_dest  (es_to_ds_dest  ),
     .ms_to_ds_dest  (ms_to_ds_dest  ),
     .ws_to_ds_dest  (ws_to_ds_dest  ),
-    .es_to_ds_load_op(es_to_ds_load_op)
+    .es_to_ds_load_op(es_to_ds_load_op),
+    .es_to_ds_result(es_to_ds_result),
+    .ms_to_ds_result(ms_to_ds_result),
+    .ws_to_ds_result(ws_to_ds_result)
 );
 // EXE stage
 exe_stage exe_stage(
@@ -96,6 +102,7 @@ exe_stage exe_stage(
     //to ds
     .es_to_ds_dest  (es_to_ds_dest  ),
     .es_to_ds_load_op(es_to_ds_load_op),
+    .es_to_ds_result (es_to_ds_result ),
     //to ms
     .es_to_ms_valid (es_to_ms_valid ),
     .es_to_ms_bus   (es_to_ms_bus   ),
@@ -120,6 +127,7 @@ mem_stage mem_stage(
     .ms_to_ws_bus   (ms_to_ws_bus   ),
     //to ds
     .ms_to_ds_dest  (ms_to_ds_dest  ),
+    .ms_to_ds_result(ms_to_ds_result),
     //from data-sram
     .data_sram_rdata(data_sram_rdata)
 );
@@ -134,6 +142,7 @@ wb_stage wb_stage(
     .ms_to_ws_bus   (ms_to_ws_bus   ),
     //to ds
     .ws_to_ds_dest  (ws_to_ds_dest  ),
+    .ws_to_ds_result(ws_to_ds_result),
     //to rf: for write back
     .ws_to_rf_bus   (ws_to_rf_bus   ),
     //trace debug interface

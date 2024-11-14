@@ -47,7 +47,7 @@ assign nextpc       = br_taken ? br_target : seq_pc;
 
 // IF stage
 assign fs_ready_go    = ~br_taken;   // 准备发送
-assign fs_allowin     = !fs_valid || fs_ready_go && ds_allowin;     // 可接收数据（不阻塞
+assign fs_allowin     = !fs_valid || (fs_ready_go && ds_allowin);
 assign fs_to_ds_valid =  fs_valid && fs_ready_go;   
 always @(posedge clk) begin
     if (reset) begin

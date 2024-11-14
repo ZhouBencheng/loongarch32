@@ -20,7 +20,12 @@ module id_stage(
     input  [4                  :0] es_to_ds_dest ,
     input  [4                  :0] ms_to_ds_dest ,
     input  [4                  :0] ws_to_ds_dest ,
-    input                          es_to_ds_load_op
+    // 处理ld阻塞
+    input                          es_to_ds_load_op,
+    // 处理exe ms ws前递结果
+    input  [31                 :0] es_to_ds_result ,
+    input  [31                 :0] ms_to_ds_result ,
+    input  [31                 :0] ws_to_ds_result
 );
 
 wire        br_taken;
@@ -230,9 +235,9 @@ assign rd_wait = ~src_no_rd && (rd != 5'b00000) && (rd == es_to_ds_dest || rd ==
 
 assign no_wait = ~rj_wait & ~rk_wait & ~rd_wait;
 
-assign load_stall = es_to_ds_load_op && ((rd == es_to_ds_dest && rj_wait) 
-                                      || (rd == ms_to_ds_dest && rk_wait) 
-                                      || (rd == ws_to_ds_dest && rd_wait));
+assign load_stall = (es_to_ds_load_op) && ((rj == es_to_ds_dest && rj_wait) 
+                                      || (rk == es_to_ds_dest && rk_wait) 
+                                      || (rd == es_to_ds_dest && rd_wait));
 assign br_stall = load_stall & br_taken & ds_valid;
 
 regfile u_regfile(
@@ -246,8 +251,18 @@ regfile u_regfile(
     .wdata  (rf_wdata )
     );
 
-assign rj_value  = rf_rdata1;
-assign rkd_value = rf_rdata2;
+assign rj_value  = rj_wait ? ((rj == es_to_ds_dest) ? es_to_ds_result :
+                              (rj == ms_to_ds_dest) ? ms_to_ds_result :
+                                                      ws_to_ds_result) :
+                   rf_rdata1;
+
+assign rkd_value = rk_wait ? ((rk == es_to_ds_dest) ? es_to_ds_result :
+                              (rk == ms_to_ds_dest) ? ms_to_ds_result :
+                                                      ws_to_ds_result) :
+                   rd_wait ? ((rd == es_to_ds_dest) ? es_to_ds_result :
+                              (rd == ms_to_ds_dest) ? ms_to_ds_result :
+                                                      ws_to_ds_result) :
+                   rf_rdata2;
 
 assign rj_eq_rd = (rj_value == rkd_value);
 assign br_taken = (   inst_beq  &&  rj_eq_rd
@@ -255,7 +270,7 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_jirl
                    || inst_bl
                    || inst_b
-                )  && ds_valid && no_wait; // 非阻塞情况下指定是否要跳转
+                )  && ds_valid && ~load_stall; // 非阻塞情况下指定是否要跳转
 assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (ds_pc + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
@@ -287,7 +302,7 @@ assign ds_to_es_bus = {alu_op       ,   // 12
                        res_from_mem
                     };
 
-assign ds_ready_go    = no_wait;
+assign ds_ready_go    = ds_valid && ~load_stall;
 assign ds_allowin     = (!ds_valid) || (ds_ready_go && es_allowin);
 assign ds_to_es_valid = ds_valid && ds_ready_go;
 always @(posedge clk) begin
