@@ -39,7 +39,7 @@ wire [31:0] ds_inst;
 reg         ds_valid   ;
 wire        ds_ready_go;
 
-wire [11:0] alu_op;
+wire [18:0] alu_op;
 
 wire        load_op;
 wire        src1_is_pc;
@@ -112,6 +112,13 @@ wire        inst_ld_b;
 wire        inst_ld_h;
 wire        inst_ld_bu;
 wire        inst_ld_hu;
+wire        inst_mul_w;
+wire        inst_mulh_w;
+wire        inst_mulh_wu;
+wire        inst_div_w;
+wire        inst_div_wu;
+wire        inst_mod_w;
+wire        inst_mod_wu;
 
 wire        need_ui5;
 wire        need_si12;
@@ -148,7 +155,9 @@ wire        no_wait;
 wire [1:0]  st_type;
 wire [2:0]  ld_type;
 
-wire load_stall;
+wire        load_stall;
+
+wire        div_or_mod_op;
 
 assign op_31_26  = ds_inst[31:26];
 assign op_25_22  = ds_inst[25:22];
@@ -209,6 +218,13 @@ assign inst_ld_b    = op_31_26_d[6'h0a] & op_25_22_d[4'h0];
 assign inst_ld_h    = op_31_26_d[6'h0a] & op_25_22_d[4'h1];
 assign inst_ld_bu   = op_31_26_d[6'h0a] & op_25_22_d[4'h8];
 assign inst_ld_hu   = op_31_26_d[6'h0a] & op_25_22_d[4'h9];
+assign inst_mul_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h18];
+assign inst_mulh_w  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h19];
+assign inst_mulh_wu = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h1a];
+assign inst_div_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h00];
+assign inst_div_wu  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h02];
+assign inst_mod_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h01];
+assign inst_mod_wu  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h03];
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | 
                     inst_st_w  | inst_jirl   | inst_bl   |
@@ -226,6 +242,13 @@ assign alu_op[ 8] = inst_slli_w | inst_sll;
 assign alu_op[ 9] = inst_srli_w | inst_srl;
 assign alu_op[10] = inst_srai_w | inst_sra;
 assign alu_op[11] = inst_lu12i_w;
+assign alu_op[12] = inst_mul_w;
+assign alu_op[13] = inst_mulh_w;
+assign alu_op[14] = inst_mulh_wu;
+assign alu_op[15] = inst_div_w;
+assign alu_op[16] = inst_div_wu;
+assign alu_op[17] = inst_mod_w;
+assign alu_op[18] = inst_mod_wu;
 
 assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
 assign need_si12  =  inst_addi_w | inst_ld_w   | inst_st_w |
@@ -396,7 +419,9 @@ assign ld_type = inst_ld_w ? 3'b000 :
                  inst_ld_bu ? 3'b011 :
                  inst_ld_hu ? 3'b100 : 3'b101;
 
-assign ds_to_es_bus = {alu_op       ,   // 12
+assign div_or_mod_op = inst_div_w | inst_mod_w | inst_div_wu | inst_mod_wu;
+
+assign ds_to_es_bus = {alu_op       ,   // 19
                        load_op      ,   // 1
                        ld_type    ,   // 3
                        src1_is_pc   ,   // 1
@@ -410,7 +435,8 @@ assign ds_to_es_bus = {alu_op       ,   // 12
                        rkd_value    ,   // 32
                        ds_pc        ,    // 32
                        res_from_mem ,
-                       inst_no_dest
+                       inst_no_dest,
+                       div_or_mod_op
                     };
 
 assign ds_ready_go    = ds_valid && ~load_stall;

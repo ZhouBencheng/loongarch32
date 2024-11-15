@@ -35,7 +35,7 @@ wire        es_ready_go   ;
 
 reg  [`DS_TO_ES_BUS_WD -1:0] ds_to_es_bus_r;
 
-wire [11:0] alu_op      ;
+wire [18:0] alu_op      ;
 wire        es_load_op;
 wire        src1_is_pc;
 wire        src2_is_imm;
@@ -51,6 +51,8 @@ wire        es_inst_no_dest;
 wire [2:0]  ld_type;
 wire [1:0]  st_type;
 reg  [3:0]  st_data_mask;
+wire        m_axis_dout_tvalid;
+wire        div_or_mod_op;
 
 assign {alu_op,
         es_load_op,
@@ -66,7 +68,8 @@ assign {alu_op,
         rkd_value,
         es_pc,
         res_from_mem,
-        es_inst_no_dest
+        es_inst_no_dest,
+        div_or_mod_op
        } = ds_to_es_bus_r;
 
 wire [31:0] alu_src1   ;
@@ -89,7 +92,7 @@ assign es_to_ms_bus = {res_from_mem,  //70:70 1
                        es_inst_no_dest //1
                       };
 
-assign es_ready_go    = 1'b1;
+assign es_ready_go    = div_or_mod_op ? m_axis_dout_tvalid : 1'b1;
 assign es_allowin     = !es_valid || es_ready_go && ms_allowin;
 assign es_to_ms_valid =  es_valid && es_ready_go;
 assign es_to_ds_dest  =  dest & {5{es_valid & ~es_inst_no_dest}};
@@ -110,10 +113,13 @@ assign alu_src1 = src1_is_pc  ? es_pc  : rj_value;
 assign alu_src2 = src2_is_imm ? imm : rkd_value;
 
 alu u_alu(
+    .clk        (clk       ),
+    .reset      (reset     ),
     .alu_op     (alu_op    ),
     .alu_src1   (alu_src1  ),
     .alu_src2   (alu_src2  ),
-    .alu_result (alu_result)
+    .alu_result (alu_result),
+    .m_axis_dout_tvalid(m_axis_dout_tvalid)
     );
     
 assign es_to_ds_result = alu_result;
