@@ -27,7 +27,8 @@ module mycpu_top(
     output [31:0] debug_es_alu_result,
     output [31:0] debug_mem_result,
     output [31:0] debug_es_alu_src1,
-    output [31:0] debug_es_alu_src2
+    output [31:0] debug_es_alu_src2,
+    output [31:0] debug_es_data_sram_wdata
 );
 reg         reset;
 always @(posedge clk) reset <= ~resetn;
@@ -127,7 +128,8 @@ exe_stage exe_stage(
     .debug_es_pc    (debug_es_pc     ),
     .debug_es_alu_result(debug_es_alu_result),
     .debug_es_alu_src1  (debug_es_alu_src1  ),
-    .debug_es_alu_src2  (debug_es_alu_src2  )
+    .debug_es_alu_src2  (debug_es_alu_src2  ),
+    .debug_es_data_sram_wdata(debug_es_data_sram_wdata)
 );
 // MEM stage
 mem_stage mem_stage(
