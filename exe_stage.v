@@ -27,7 +27,8 @@ module exe_stage(
     output [31:0] debug_es_alu_result,
     output [31:0] debug_es_alu_src1,
     output [31:0] debug_es_alu_src2,
-    output [31:0] debug_es_data_sram_wdata
+    output [31:0] debug_es_data_sram_wdata,
+    output        debug_es_m_axis_dout_tvalid
 );
 
 reg         es_valid      ;
@@ -161,5 +162,6 @@ always @(*) begin
 end
 
 assign debug_es_data_sram_wdata = data_sram_wdata;
+assign debug_es_m_axis_dout_tvalid = m_axis_dout_tvalid;
 
 endmodule

@@ -1,6 +1,6 @@
 module alu(
   input  wire        clk,
-  input  wire        resetn,
+  input  wire        reset,
   input  wire [18:0] alu_op,
   input  wire [31:0] alu_src1, //mod
   input  wire [31:0] alu_src2, //mod
@@ -32,17 +32,11 @@ wire op_modu;    //modulus unsigned
 wire m_axis_dout_tvalid_signed;
 wire m_axis_dout_tvalid_unsigned;
 
-reg  s_axis_divisor_tvalid_signed;
-reg  s_axis_divisor_tvalid_unsigned;
+wire s_axis_div_tvalid_signed;
+wire s_axis_div_tvalid_unsigned;
 
-reg  s_axis_dividend_tvalid_signed;
-reg  s_axis_dividend_tvalid_unsigned;
-
-wire s_axis_divisor_tready_signed;
-wire s_axis_divisor_tready_unsigned;
-
-wire s_axis_dividend_tready_signed;
-wire s_axis_dividend_tready_unsigned;
+reg  div_status;
+reg  next_div_status;
 
 // control code decomposition
 assign op_add   = alu_op[ 0];
@@ -56,7 +50,7 @@ assign op_xor   = alu_op[ 7];
 assign op_sll   = alu_op[ 8];
 assign op_srl   = alu_op[ 9];
 assign op_sra   = alu_op[10];
-assign op_lui   = alu_op[11]; // mod
+assign op_lui   = alu_op[11];
 assign op_mul   = alu_op[12];
 assign op_mulh  = alu_op[13];
 assign op_mulhu = alu_op[14];
@@ -80,8 +74,6 @@ wire [64:0] mul64_result;
 wire [31:0] mul_result;
 wire [63:0] div64_result;
 wire [63:0] divu64_result;
-wire [31:0] div_result;
-wire [31:0] mod_result;
 
 // 32-bit adder
 wire [31:0] adder_a;
@@ -129,63 +121,47 @@ assign mul64_result = op_mul | op_mulh ? $signed(alu_src1) * $signed(alu_src2) :
 assign mul_result = op_mul ? mul64_result[31:0] : mul64_result[63:32];
 
 always @(posedge clk) begin
-  if (s_axis_divisor_tvalid_signed & s_axis_divisor_tready_signed) begin
-    s_axis_divisor_tvalid_signed <= 1'b0;
-  end else if (op_div) begin
-    s_axis_divisor_tvalid_signed <= 1'b1;
-  end
-
-  if (s_axis_dividend_tvalid_signed & s_axis_dividend_tready_signed) begin
-    s_axis_dividend_tvalid_signed <= 1'b0;
-  end else if (op_div) begin
-    s_axis_dividend_tvalid_signed <= 1'b1;
+  if (reset) begin
+    div_status <= 1'b0;
+  end else begin
+    div_status <= next_div_status;
   end
 end
 
-always @(posedge clk) begin
-  if (s_axis_divisor_tvalid_unsigned & s_axis_divisor_tready_unsigned) begin
-    s_axis_divisor_tvalid_unsigned <= 1'b0;
-  end else if (op_divu) begin
-    s_axis_divisor_tvalid_unsigned <= 1'b1;
-  end
-
-  if (s_axis_dividend_tvalid_unsigned & s_axis_dividend_tready_unsigned) begin
-    s_axis_dividend_tvalid_unsigned <= 1'b0;
-  end else if (op_divu) begin
-    s_axis_dividend_tvalid_unsigned <= 1'b1;
+always @(*) begin
+  next_div_status = 1'b0;
+  if (div_status) begin
+    next_div_status = 1'b0;
+  end else if (op_div | op_mod | op_divu | op_modu) begin
+    next_div_status = 1'b1;
   end
 end
+
+assign s_axis_div_tvalid_signed = (op_div || op_mod) && !div_status;
+assign s_axis_div_tvalid_unsigned = (op_divu || op_modu) && !div_status;
 
 // div result
 div_gen_signed u_div_gen_signed(
     .aclk(clk),
-    .aresetn(resetn),
     .s_axis_divisor_tdata(alu_src2),
-    .s_axis_divisor_tvalid(s_axis_divisor_tvalid_signed),
-    .s_axis_divisor_tready(s_axis_divisor_tready_signed),
+    .s_axis_divisor_tvalid(s_axis_div_tvalid_signed),
     .s_axis_dividend_tdata(alu_src1),
-    .s_axis_dividend_tvalid(s_axis_dividend_tvalid_signed),
-    .s_axis_dividend_tready(s_axis_dividend_tready_signed),
+    .s_axis_dividend_tvalid(s_axis_div_tvalid_signed),
     .m_axis_dout_tdata(div64_result),
     .m_axis_dout_tvalid(m_axis_dout_tvalid_signed)
 );
 
 div_gen_unsigned u_div_gen_unsigned(
     .aclk(clk),
-    .aresetn(resetn),
     .s_axis_divisor_tdata(alu_src2),
-    .s_axis_divisor_tvalid(s_axis_divisor_tvalid_unsigned),
-    .s_axis_divisor_tready(s_axis_divisor_tready_unsigned),
+    .s_axis_divisor_tvalid(s_axis_div_tvalid_unsigned),
     .s_axis_dividend_tdata(alu_src1),
-    .s_axis_dividend_tvalid(s_axis_dividend_tvalid_unsigned),
-    .s_axis_dividend_tready(s_axis_dividend_tready_unsigned),
+    .s_axis_dividend_tvalid(s_axis_div_tvalid_unsigned),
     .m_axis_dout_tdata(divu64_result),
     .m_axis_dout_tvalid(m_axis_dout_tvalid_unsigned)
 );
 
 assign m_axis_dout_tvalid = m_axis_dout_tvalid_signed | m_axis_dout_tvalid_unsigned;
-assign div_result = op_div ? div64_result[63:32] : divu64_result[63:32];
-assign mod_result = op_mod ? div64_result[31:0]  : divu64_result[31:0];
 
 // final result mux
 assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
@@ -199,7 +175,9 @@ assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
                 | ({32{op_sll       }} & sll_result)
                 | ({32{op_srl | op_sra}} & sr_result)
                 | ({32{op_mul | op_mulh | op_mulhu}} & mul_result)
-                | ({32{op_div | op_divu}} & div_result)
-                | ({32{op_mod | op_modu}} & mod_result);
+                | ({32{op_div       }} & div64_result[63:32])
+                | ({32{op_divu      }} & divu64_result[63:32])
+                | ({32{op_mod       }} & div64_result[31:0])
+                | ({32{op_modu      }} & divu64_result[31:0]);
 
 endmodule

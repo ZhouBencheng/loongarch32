@@ -423,7 +423,7 @@ assign div_or_mod_op = inst_div_w | inst_mod_w | inst_div_wu | inst_mod_wu;
 
 assign ds_to_es_bus = {alu_op       ,   // 19
                        load_op      ,   // 1
-                       ld_type    ,   // 3
+                       ld_type      ,   // 3
                        src1_is_pc   ,   // 1
                        src2_is_imm  ,   // 1
                        gr_we        ,   // 1
