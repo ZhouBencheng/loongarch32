@@ -71,6 +71,7 @@ wire [31:0] lui_result;
 wire [31:0] sll_result;
 wire [64:0] sr64_result;
 wire [64:0] mul64_result;
+wire [64:0] mulu64_result;
 wire [31:0] mul_result;
 wire [63:0] div64_result;
 wire [63:0] divu64_result;
@@ -115,10 +116,12 @@ assign sr64_result = {{32{op_sra & alu_src1[31]}}, alu_src1[31:0]} >> alu_src2; 
 assign sr_result = sr64_result[31:0];
 
 // mul result
-assign mul64_result = op_mul | op_mulh ? $signed(alu_src1) * $signed(alu_src2) :
-                          /*op_mulhu*/   $unsigned(alu_src1) * $unsigned(alu_src2);
+assign mul64_result = $signed(alu_src1) * $signed(alu_src2);
+assign mulu64_result = $unsigned(alu_src1) * $unsigned(alu_src2);
 
-assign mul_result = op_mul ? mul64_result[31:0] : mul64_result[63:32];
+assign mul_result = op_mul ? mul64_result[31:0] : 
+                    op_mulhu ? mulu64_result[63:32] : 
+                    mul64_result[63:32];
 
 always @(posedge clk) begin
   if (reset) begin
@@ -130,7 +133,7 @@ end
 
 always @(*) begin
   next_div_status = 1'b0;
-  if (div_status) begin
+  if (m_axis_dout_tvalid) begin
     next_div_status = 1'b0;
   end else if (op_div | op_mod | op_divu | op_modu) begin
     next_div_status = 1'b1;
@@ -140,8 +143,7 @@ end
 assign s_axis_div_tvalid_signed = (op_div || op_mod) && !div_status;
 assign s_axis_div_tvalid_unsigned = (op_divu || op_modu) && !div_status;
 
-// div result
-div_gen_signed u_div_gen_signed(
+div_gen_0 u_div_gen_signed(
     .aclk(clk),
     .s_axis_divisor_tdata(alu_src2),
     .s_axis_divisor_tvalid(s_axis_div_tvalid_signed),
@@ -151,7 +153,7 @@ div_gen_signed u_div_gen_signed(
     .m_axis_dout_tvalid(m_axis_dout_tvalid_signed)
 );
 
-div_gen_unsigned u_div_gen_unsigned(
+div_gen_1 u_div_gen_unsigned(
     .aclk(clk),
     .s_axis_divisor_tdata(alu_src2),
     .s_axis_divisor_tvalid(s_axis_div_tvalid_unsigned),
