@@ -1,4 +1,5 @@
 `include "mycpu_head.v"
+`include "csr_head.v"
 
 module id_stage(
     input                          clk           ,
@@ -9,6 +10,13 @@ module id_stage(
     //from fs
     input                          fs_to_ds_valid,
     input  [`FS_TO_DS_BUS_WD -1:0] fs_to_ds_bus  ,
+    //from wb
+    input                          wb_ex         ,
+    input                          wb_ertn_flush ,
+    input  [31                 :0] ws_to_ds_result,
+    input  [4                  :0] ws_to_ds_dest ,
+
+    input                          has_int       ,
     //to es
     output                         ds_to_es_valid,
     output [`DS_TO_ES_BUS_WD -1:0] ds_to_es_bus  ,
@@ -16,25 +24,40 @@ module id_stage(
     output [`BR_BUS_WD       -1:0] br_bus        ,
     //to rf: for write back
     input  [`WS_TO_RF_BUS_WD -1:0] ws_to_rf_bus  ,
-    // from es ms ws
-    input  [4                  :0] es_to_ds_dest ,
-    input  [4                  :0] ms_to_ds_dest ,
-    input  [4                  :0] ws_to_ds_dest ,
-    // 处理ld阻塞
-    input                          es_to_ds_load_op,
-    // 处理exe ms ws前递结果
-    input  [31                 :0] es_to_ds_result ,
-    input  [31                 :0] ms_to_ds_result ,
-    input  [31                 :0] ws_to_ds_result,
 
-    output [31                 :0] debug_id_pc
+    input  [4                  :0] es_to_ds_dest ,
+    input                          es_to_ds_load_op,
+    input  [31                 :0] es_to_ds_result ,
+    input                          es_to_ds_csr_we,
+    input  [13                 :0] es_to_ds_csr_num,
+    input                          es_to_ds_valid,
+
+    input  [31                 :0] ms_to_ds_result ,
+    input  [4                  :0] ms_to_ds_dest ,
+    input                          ms_to_ds_csr_we,
+    input  [13                 :0] ms_to_ds_csr_num,
+    input                          ms_to_ds_valid,
+
+    output [31                 :0] debug_id_pc,
+    output wire                    debug_id_br_taken,
+    output wire                    debug_id_br_target,
+    output wire                    debug_id_br_offset,
+    output wire                    debug_need_si26,
+    output wire                    debug_i26,
+    output [31                 :0] debug_ds_inst
 );
 
 wire        br_taken;
+wire        br_taken_cancel;
 wire [31:0] br_target;
 
 wire [31:0] ds_pc;
 wire [31:0] ds_inst;
+
+wire        id_ex_in;
+wire [14: 0]id_ex_code_in;
+wire        id_ex_out;
+wire [14: 0]id_ex_code_out;
 
 reg         ds_valid   ;
 wire        ds_ready_go;
@@ -67,6 +90,7 @@ wire [11:0] i12;
 wire [19:0] i20;
 wire [15:0] i16;
 wire [25:0] i26;
+wire [13:0] csr_num;
 
 wire [63:0] op_31_26_d;
 wire [15:0] op_25_22_d;
@@ -119,6 +143,16 @@ wire        inst_div_w;
 wire        inst_div_wu;
 wire        inst_mod_w;
 wire        inst_mod_wu;
+// CSR相关指令
+wire        inst_csrrd;
+wire        inst_csrwr;
+wire        inst_csrxchg;
+wire        inst_ertn;
+wire        inst_syscall;
+wire        inst_break;
+wire        inst_rdcntid;
+wire        inst_rdcntvl_w;
+wire        inst_rdcntvh_w;
 
 wire        need_ui5;
 wire        need_si12;
@@ -163,6 +197,8 @@ assign op_31_26  = ds_inst[31:26];
 assign op_25_22  = ds_inst[25:22];
 assign op_21_20  = ds_inst[21:20];
 assign op_19_15  = ds_inst[19:15];
+
+assign csr_num   = ds_inst[23:10];
 
 assign rd   = ds_inst[ 4: 0];
 assign rj   = ds_inst[ 9: 5];
@@ -225,6 +261,28 @@ assign inst_div_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & 
 assign inst_div_wu  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h02];
 assign inst_mod_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h01];
 assign inst_mod_wu  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h03];
+// CSR相关指令
+assign inst_csrrd       = op_31_26_d[6'h01] & (op_25_22[3:2] == 2'b0) & (rj == 5'h00);
+assign inst_csrwr       = op_31_26_d[6'h01] & (op_25_22[3:2] == 2'b0) & (rj == 5'h01);
+assign inst_csrxchg     = op_31_26_d[6'h01] & (op_25_22[3:2] == 2'b0) & ~inst_csrrd & ~inst_csrwr;
+assign inst_ertn        = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & (rk == 5'h0e) & (~|rj) & (~|rd);
+assign inst_syscall     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h16];
+assign inst_break       = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h14];
+assign inst_rdcntid     = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk == 5'h18) & (|rj) & (~|rd);
+assign inst_rdcntvl_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk == 5'h18) & (~|rj) & (|rd);
+assign inst_rdcntvh_w   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & (rk == 5'h19) & (~|rj) & (|rd);
+
+assign inst_ine = ~(
+    inst_and     | inst_or     | inst_xor    | inst_slli_w | inst_srli_w  | inst_srai_w |
+    inst_addi_w  | inst_ld_w   | inst_st_w   | inst_jirl   | inst_b       | inst_bl     |
+    inst_beq     | inst_bne    | inst_lu12i_w| inst_slti   | inst_sltui   | inst_andi   |
+    inst_ori     | inst_xori   | inst_sll    | inst_srl    | inst_sra     | inst_pcaddu12i |
+    inst_blt     | inst_bge    | inst_bltu   | inst_bgeu   | inst_st_b    | inst_st_h   |
+    inst_ld_b    | inst_ld_h   | inst_ld_bu  | inst_ld_hu  | inst_mul_w   | inst_mulh_w |
+    inst_mulh_wu | inst_div_w  | inst_div_wu | inst_mod_w  | inst_mod_wu  | inst_csrrd  |
+    inst_csrwr   | inst_csrxchg| inst_ertn   | inst_syscall| inst_break   | inst_add_w  |
+    inst_sub_w   | inst_slt    | inst_sltu   | inst_nor
+);
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | 
                     inst_st_w  | inst_jirl   | inst_bl   |
@@ -274,12 +332,14 @@ assign imm = src2_is_4 ? 32'h4                      :
 
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ;
+        
+assign debug_i26 = i26;
 
 assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
 
-assign src_reg_is_rd = inst_beq | inst_bne | inst_st_w | inst_blt |
-                       inst_bge | inst_bltu | inst_bgeu| inst_st_b| 
-                       inst_st_h;
+assign src_reg_is_rd = inst_beq | inst_bne  | inst_st_w | inst_blt |
+                       inst_bge | inst_bltu | inst_bgeu | inst_st_b| 
+                       inst_st_h| inst_csrwr| inst_csrxchg;
 
 assign src1_is_pc    = inst_jirl | inst_bl | inst_pcaddu12i;
 
@@ -320,7 +380,8 @@ assign inst_no_dest = inst_beq  | inst_bne | inst_st_w | inst_b |
                       inst_blt  | inst_bge | inst_bltu | inst_bgeu|
                       inst_st_b | inst_st_h;
 
-assign src_no_rj    = inst_b      | inst_bl     | inst_lu12i_w| inst_pcaddu12i;
+assign src_no_rj    = inst_b      | inst_bl     | inst_lu12i_w| inst_pcaddu12i|
+                      inst_csrrd  | inst_csrwr;
 
 assign src_no_rk    = inst_slli_w | inst_srli_w | inst_srai_w | inst_addi_w |
                       inst_ld_w   | inst_st_w   | inst_jirl   | inst_b      |
@@ -328,10 +389,12 @@ assign src_no_rk    = inst_slli_w | inst_srli_w | inst_srai_w | inst_addi_w |
                       inst_blt    | inst_bge    | inst_bltu   | inst_bgeu   |
                       inst_pcaddu12i| inst_andi | inst_ori    | inst_xori   |
                       inst_st_b   | inst_st_h   | inst_ld_b   | inst_ld_h   |
-                      inst_ld_bu  | inst_ld_hu;
+                      inst_ld_bu  | inst_ld_hu  | inst_csrrd  | inst_csrwr  | 
+                      inst_csrxchg;
+
 assign src_no_rd    = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_blt & 
                       ~inst_bge & ~inst_bltu & ~inst_bgeu &
-                      ~inst_st_b & ~inst_st_h;
+                      ~inst_st_b & ~inst_st_h & ~inst_csrwr & ~inst_csrxchg;
 
 assign rj_wait = ~src_no_rj && (rj != 5'b00000) && (rj == es_to_ds_dest || rj == ms_to_ds_dest || rj == ws_to_ds_dest);
 assign rk_wait = ~src_no_rk && (rk != 5'b00000) && (rk == es_to_ds_dest || rk == ms_to_ds_dest || rk == ws_to_ds_dest);
@@ -342,6 +405,9 @@ assign no_wait = ~rj_wait & ~rk_wait & ~rd_wait;
 assign load_stall = (es_to_ds_load_op) && ((rj == es_to_ds_dest && rj_wait) 
                                        ||  (rk == es_to_ds_dest && rk_wait) 
                                        ||  (rd == es_to_ds_dest && rd_wait));
+
+assign csr_stall = src_from_csr && ((csr_num == es_to_ds_csr_num && es_to_ds_valid && es_to_ds_csr_we) 
+                                ||  (csr_num == ms_to_ds_csr_num && ms_to_ds_valid && ms_to_ds_csr_we));
 
 regfile u_regfile(
     .clk    (clk      ),
@@ -387,20 +453,37 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_jirl
                    || inst_bl
                    || inst_b
-                )  && ds_valid && ~load_stall; // 非阻塞情况下指定是否要跳转
+                )  && ds_valid && ~load_stall && ~csr_stall; // 非阻塞情况下指定是否要跳转
+
+assign br_taken_cancel = br_taken && ds_ready_go;
 
 assign br_target = (inst_beq || inst_bne || inst_bl || inst_b ||
                     inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (ds_pc + br_offs) :
                                                         /*inst_jirl*/ (rj_value + jirl_offs);
 
-assign br_bus = {br_taken, br_target};
+assign br_bus = {br_taken_cancel, br_taken, br_target};
 
 reg  [`FS_TO_DS_BUS_WD -1:0] fs_to_ds_bus_r;
 
 assign {ds_inst,
-        ds_pc  } = fs_to_ds_bus_r;
+        ds_pc,
+        id_ex_in,
+        id_ex_code_in
+       } = fs_to_ds_bus_r;
+
+assign id_ex_out      = id_ex_in || inst_syscall || inst_break || inst_ine || has_int;
+assign id_ex_code_out = id_ex_in ? id_ex_code_in :
+                        inst_syscall ? {9'h0, `ECODE_SYS} :
+                        inst_break   ? {9'h0, `ECODE_BRK} :
+                        inst_ine     ? {9'h0, `ECODE_INE} :
+                        has_int      ? {9'h0, `ECODE_INT} : 15'h0000;
 
 assign debug_id_pc = ds_pc;
+assign debug_id_br_taken  = br_taken;
+assign debug_id_br_target = br_target;
+assign debug_id_br_offset = br_offs;
+assign debug_need_si26    = need_si26;
+assign debug_ds_inst      = ds_inst;
 
 assign {rf_we   ,  //37:37
         rf_waddr,  //36:32
@@ -421,6 +504,17 @@ assign ld_type = inst_ld_w ? 3'b000 :
 
 assign div_or_mod_op = inst_div_w | inst_mod_w | inst_div_wu | inst_mod_wu;
 
+// csr
+wire [31:0] csr_wdata;
+wire [31:0] csr_wmask;
+wire        csr_we;
+wire        src_from_csr;
+
+assign src_from_csr = inst_csrrd | inst_csrxchg | inst_csrwr;
+assign csr_we       = inst_csrwr | inst_csrxchg;
+assign csr_wdata    = rkd_value;
+assign csr_wmask    = inst_csrwr ? 32'hffffffff : rj_value;
+
 assign ds_to_es_bus = {alu_op       ,   // 19
                        load_op      ,   // 1
                        ld_type      ,   // 3
@@ -435,11 +529,19 @@ assign ds_to_es_bus = {alu_op       ,   // 19
                        rkd_value    ,   // 32
                        ds_pc        ,    // 32
                        res_from_mem ,
-                       inst_no_dest,
-                       div_or_mod_op
+                       inst_no_dest ,
+                       div_or_mod_op,
+                       src_from_csr,   // 1
+                       csr_we,         // 1
+                       csr_num,        // 14
+                       csr_wdata,      // 32
+                       csr_wmask,      // 32
+                       id_ex_out,      // 1
+                       id_ex_code_out, // 15
+                       inst_ertn      // 1
                     };
 
-assign ds_ready_go    = ds_valid && ~load_stall;
+assign ds_ready_go    = ds_valid && ~load_stall && ~csr_stall || wb_ertn_flush || wb_ex;
 assign ds_allowin     = (!ds_valid) || (ds_ready_go && es_allowin);
 assign ds_to_es_valid = ds_valid && ds_ready_go;
 always @(posedge clk) begin
@@ -448,6 +550,12 @@ always @(posedge clk) begin
     end
     else if (ds_allowin) begin
         ds_valid <= fs_to_ds_valid;
+    end
+    else if (wb_ex || wb_ertn_flush) begin
+        ds_valid <= 1'b0;
+    end
+    else if (br_taken_cancel) begin
+        ds_valid <= 1'b0;
     end
 
     if (fs_to_ds_valid && ds_allowin) begin

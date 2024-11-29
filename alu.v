@@ -4,6 +4,7 @@ module alu(
   input  wire [18:0] alu_op,
   input  wire [31:0] alu_src1, //mod
   input  wire [31:0] alu_src2, //mod
+  input  wire        alu_division_tvalid,
   output wire [31:0] alu_result,
   output wire        m_axis_dout_tvalid
 );
@@ -140,8 +141,8 @@ always @(*) begin
   end
 end
 
-assign s_axis_div_tvalid_signed = (op_div || op_mod) && !div_status;
-assign s_axis_div_tvalid_unsigned = (op_divu || op_modu) && !div_status;
+assign s_axis_div_tvalid_signed = (op_div || op_mod) && !div_status && alu_division_tvalid;
+assign s_axis_div_tvalid_unsigned = (op_divu || op_modu) && !div_status && alu_division_tvalid;
 
 div_gen_0 u_div_gen_signed(
     .aclk(clk),
