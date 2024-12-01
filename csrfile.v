@@ -235,7 +235,7 @@ always @(posedge clk) begin
         timer_cnt <= {tcfg_next_value[`CSR_TCFG_INITVAL], 2'b00};
     else if (csr_tcfg_en && timer_cnt != 32'hffffffff) begin
         if (timer_cnt == 32'd0 && csr_tcfg_periodic)
-            timer_cnt <= {tcfg_next_value[`CSR_TCFG_INITVAL], 2'b00};
+            timer_cnt <= {csr_tcfg_initval, 2'b00};
         else
             timer_cnt <= timer_cnt - 32'd1;
     end
